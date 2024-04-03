@@ -1,5 +1,4 @@
-인코딩 기법 관련 코드
-
+ref : Notion page
 
 Temporal Population Encoding 기법을 적용하는 파일
 
