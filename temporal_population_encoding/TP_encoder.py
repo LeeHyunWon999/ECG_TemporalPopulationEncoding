@@ -15,10 +15,17 @@
 # - 인코딩된 데이터(2차원 list 텍스트파일, 파일명은 원본 데이터파일명_encoded.txt)
 # - 인코딩에 사용된 1차원 뉴런들의 $\tau$, $g$ 값 들어간 데이터(2차원 list 텍스트파일, 파일명은 원본 데이터파일명_parameters.txt)
 
-
+import sys
 import json
 
+# json 읽어다가 반환(파일경로 없으면 에러띄우기)
+def loadJson() : 
+    if (len(sys.argv) != 2) : 
+        print("config.json 파일 경로가 없거나 그 이상의 인자가 들어갔습니다!", len(sys.argv))
+        exit()
+    else : 
+        print("작업중..")
 
 
 if __name__ == "__main__" : 
-    pass
+    json_data = loadJson()
