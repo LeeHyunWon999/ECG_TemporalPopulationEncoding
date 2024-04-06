@@ -1,6 +1,0 @@
-{
-    "inputPath" : "./data/input/temp.txt",
-    "dim" : 5,
-    "adjustment_train" : false,
-    "outputPath" : "./data/output/"
-}
