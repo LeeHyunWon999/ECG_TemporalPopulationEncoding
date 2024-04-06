@@ -58,14 +58,20 @@ def encode(json_data) :
     neuron_list = []
     encoded_list = []
     for i in range(json_data["dim"]) : 
-        neuron_list.append(TP_neuron(tau = 1, g = ((float(i) + 1) / float(json_data["dim"])) + 0.5))
+        # Leaky인 경우 tau값은 0.5~1.5 사이에서 랜덤 지정
+        if json_data["leaky"] : 
+            this_tau = np.random.rand() + 0.5
+        else : 
+            this_tau = 1
+        neuron_list.append(TP_neuron(tau = this_tau, g = ((float(i) + 1) / float(json_data["dim"])) + 0.5))
         neuron_list[i].step_mode = 'm'
         encoded_list.append(neuron_list[i](inputData))
         print(i,"째 뉴런 인코딩 결과 : ", encoded_list[i])
         neuron_list[i].reset()
     
+    
     # 결과값(텐서) 의 첫 열과 둘째 열에 각각 tau, g 값 추가
-    for i in range(json_data["dim"]) : 
+    for i in range(len(encoded_list)) : 
         encoded_list[i] = encoded_list[i].tolist()
         encoded_list[i].insert(0, neuron_list[i].g)
         encoded_list[i].insert(0, neuron_list[i].tau)
