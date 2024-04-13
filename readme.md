@@ -26,3 +26,7 @@ Temporal Population Encoding 기법을 적용하는 파일
 
 - IF 뉴런이 기본값이므로 인코딩에 사용되는 하이퍼파라미터 중 tau에 대한 처리는 하지 않은 상태이며, g 값은 1.5 ~ 1.5 사이에서 균등분포하게끔 설정함
 - 출력값으로 저장되는 파일의 경우, 각 행의 첫 값이 tau, 둘째 값이 g이며, leaky하지 않은 상태더라도 변수값을 할당하기 때문에 형식은 동일하게 유지됨
+
+## 시각화
+
+- TP_visual.py에 인코딩 대상 데이터명을 인자로 입력하면(ex : temp), ./data/input, output의 해당 데이터를 플롯찍어서 png로 저장함, 이 때 입력파일과 출력파일을 동시에 저장하며, 파일명은 "데이터명_visual.png" 임. (따라서 temp의 경우 temp_visual.png, temp_encoded_visual.png 이렇게 나옴)

@@ -1,7 +1,9 @@
 # .csv, .png(플롯 시각화) 파일을 무시
 *.csv
+*.png
 
 # 일단 temp 관련 데이터는 살려두기
 !temp.csv
 !temp_encoded.csv
 !temp_visual.png
+!temp_encoded_visual.png
