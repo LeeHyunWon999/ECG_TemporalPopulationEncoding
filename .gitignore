@@ -2,7 +2,7 @@
 *.csv
 *.png
 
-# 일단 temp 관련 데이터는 살려두기
+# 일단 temp 관련 데이터는 살려두기 (temp_visual.png 계열은 앞으로 안 쓸 것 같긴 하지만 일단 레거시 처리)
 !temp.csv
 !temp_encoded.csv
 !temp_visual.png
