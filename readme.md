@@ -29,4 +29,9 @@ Temporal Population Encoding 기법을 적용하는 파일
 
 ## 시각화
 
-- TP_visual.py에 인코딩 대상 데이터명을 인자로 입력하면(ex : temp), ./data/input, output의 해당 데이터를 플롯찍어서 png로 저장함, 이 때 입력파일과 출력파일을 동시에 저장하며, 파일명은 "데이터명_visual.png" 임. (따라서 temp의 경우 temp_visual.png, temp_encoded_visual.png 이렇게 나옴)
+- TP_visual.py에 인코딩 대상 데이터명을 인자로 입력하면(ex : temp), ./data/input, output의 해당 데이터를 플롯찍어서 png로 저장함, 이 때 입력파일과 출력파일을 한 파일에 저장하며, 파일명은 "데이터명_visual.png" 임. (따라서 temp의 경우 temp_encoded_visual.png)
+
+## 학습되는지 확인
+- GRU 모델 긁어다가 학습 되는지 확인할 것
+- 데이터셋 : MIT-BIH
+- 모델 가져오기 완료, 분석 및 데이터셋 변환 관련 작업 필요
