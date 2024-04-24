@@ -13,13 +13,14 @@ Programmed by Aladdin Persson <aladdin.persson at hotmail dot com>
 # Imports
 import os
 import torch
+import pandas as pd # csv 읽기용
 import torch.nn.functional as F  # 일부 활성화 함수 등 파라미터 없는 함수에 사용
 import torchvision.datasets as datasets  # 일반적인 데이터셋; 이거 아마 MIT-BIH로 바꿔야 할 듯?
 import torchvision.transforms as transforms  # 데이터 증강을 위한 일종의 변형작업이라 함
 from torch import optim  # SGD, Adam 등의 옵티마이저
 from torch import nn  # 모든 DNN 모델들
 from torch.utils.data import (
-    DataLoader,
+    DataLoader, Dataset,
 )  # 미니배치 등의 데이터셋 관리를 도와주는 녀석
 from tqdm import tqdm  # 진행도 표시용
 
@@ -39,6 +40,7 @@ sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 1
 learning_rate = 0.005 # 러닝레이트
 batch_size = 64 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
 num_epochs = 3 # 에포크(이거 early stop 걸어야 함)
+num_workers = 8 # 데이터 불러올 때 병렬화 갯수
 train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
 test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
 
@@ -71,11 +73,47 @@ class RNN_GRU(nn.Module):
 # 데이터 가져오기(아마 여길 가장 많이 바꿔야 할 듯,,,)
 # MIT-BIH를 인코딩해야 하므로, 공간 많이 잡아먹지 싶다. 이건 /data/leehyunwon/ 이쪽에 변환 후 넣고 나서 여기서 불러오는 식으로 해야 할 듯
 
+# 커스텀 데이터셋 관리 클래스
+class MITLoader(Dataset):
+
+    def __init__(self, csv_file, transforms: None) -> None:
+        super().__init__()
+        self.annotations = pd.read_csv(csv_file).values
+        self.transforms = transforms
+
+        # 데이터랑 라벨 굳이 분리 안해도 되는거 아님?? 데이터는 인코딩된거 마지막 뺀 나머지 넣고, 라벨은 어노테이션 값에 있는 라벨(마지막꺼만)가져오면 되잖아.
+
+        # 그럼 바로 인코딩 드간다.
+            # 인코딩 시 2차원 데이터가 3차원으로 늘어남에 유의할 것!!
+            
+        
+        # 일단 이 정도만 하면 데이터 로딩은 끝나는 것으로 보인다.. 아마.
+
+    def __len__(self):
+        return self.annotations.shape[0] # shape은 차원당 요소 갯수를 튜플로 반환하므로 행에 해당하는 0번 값 반환
+
+    def __getitem__(self, item):
+        # signal = self.annotations[item, :-1] # 마지막꺼 빼고 집어넣기 : 여긴 데이터셋이 달라져야 하니 수정 필요함
+
+        # 각 축을 명확히 해야 한다. RNN 계열은 입력 텐서의 차원을 (시퀀스, 배치, 입력크기) 로 기대하기 때문.
+        # 배치는 냅두고, 시퀀스와 입력크기가 차원순서에 맞는지 보고 아니면 여기서 transpose.
+
+        label = int(self.annotations[item, -1]) # 마지막꺼만 집어넣기 : 이건 그대로 둬도 될듯?
+        
+        # 얘넨 그냥 여기서 변환 갈긴거같은데 일단 대기
+        # signal = torch.from_numpy(signal).float()
+        # signal = self.transforms(signal)
+
+        return signal, torch.tensor(label).long()
+
+
 
 # 일단 raw 데이터셋 가져오기
 train_raw = 
 test_raw = 
 
+
+# 랜덤노이즈, 랜덤쉬프트는 일단 써두기만 하고 구현은 미뤄두자.
 
 
 # 레거시 : MNIST 넣을땐 일단 이렇게 했음.. 근데 이제 외부에서 끌고 오는 거라서 이걸 이제 수작업으로 바꿔야 한다는 것
