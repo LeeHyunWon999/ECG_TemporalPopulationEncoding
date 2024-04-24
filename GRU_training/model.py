@@ -73,8 +73,8 @@ class RNN_GRU(nn.Module):
 
 
 # 일단 raw 데이터셋 가져오기
-
-
+train_raw = 
+test_raw = 
 
 
 
