@@ -98,13 +98,13 @@ class MITLoader(Dataset):
         # 각 축을 명확히 해야 한다. RNN 계열은 입력 텐서의 차원을 (시퀀스, 배치, 입력크기) 로 기대하기 때문.
         # 배치는 냅두고, 시퀀스와 입력크기가 차원순서에 맞는지 보고 아니면 여기서 transpose.
 
-        label = int(self.annotations[item, -1]) # 마지막꺼만 집어넣기 : 이건 그대로 둬도 될듯?
+        label = torch.tensor(int(self.annotations[item, -1]), dtype=torch.long) # 라벨은 마지막꺼만 집어넣기 : 이건 그대로 둬도 될듯?
         
         # 얘넨 그냥 여기서 변환 갈긴거같은데 일단 대기
         # signal = torch.from_numpy(signal).float()
         # signal = self.transforms(signal)
 
-        return signal, torch.tensor(label).long()
+        return signal, label
 
 
 
