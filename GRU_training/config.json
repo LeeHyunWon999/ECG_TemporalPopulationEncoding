@@ -1,0 +1,10 @@
+{
+    "inputPath" : "./data/input/temp.csv",
+    "dim" : 5,
+    "leaky" : false,
+    "threshold" : 1.0,
+    "reset" : false,
+    "reset_value" : 0.0,
+    "adjustment_train" : false,
+    "outputPath" : "./data/output/"
+}
