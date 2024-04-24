@@ -30,7 +30,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu" # 연산에 GPU 쓰도�
 print("Device :" + device) # 확인용
 # input() # 일시정지용
 
-# 하이퍼파라미터(당장은 여기서 조정해가면서 시도해볼 것)
+# 하이퍼파라미터와 사전 설정값들(당장은 여기서 조정해가면서 시도해볼 것)
 input_size = 20 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 20개로 작업해보도록 하자.
 hidden_size = 256 # 히든레이어 크기; 이정도면 적절히 충분하겠지?
 num_layers = 2 # 레이어 크기; 히든과 출력 이렇게 2개 말하는듯
@@ -39,6 +39,8 @@ sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 1
 learning_rate = 0.005 # 러닝레이트
 batch_size = 64 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
 num_epochs = 3 # 에포크(이거 early stop 걸어야 함)
+train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
+test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
 
 
 # RNN 기반 GRU 모델 (many-to-one이니 내 작업에 그대로 쓸 수 있음)
@@ -68,13 +70,23 @@ class RNN_GRU(nn.Module):
 
 # 데이터 가져오기(아마 여길 가장 많이 바꿔야 할 듯,,,)
 # MIT-BIH를 인코딩해야 하므로, 공간 많이 잡아먹지 싶다. 이건 /data/leehyunwon/ 이쪽에 변환 후 넣고 나서 여기서 불러오는 식으로 해야 할 듯
-train_dataset = datasets.MNIST(
-    root="dataset/", train=True, transform=transforms.ToTensor(), download=True
-)
-test_dataset = datasets.MNIST(
-    root="dataset/", train=False, transform=transforms.ToTensor(), download=True
-)
-train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+
+# 일단 raw 데이터셋 가져오기
+
+
+
+
+
+# 레거시 : MNIST 넣을땐 일단 이렇게 했음.. 근데 이제 외부에서 끌고 오는 거라서 이걸 이제 수작업으로 바꿔야 한다는 것
+# train_dataset = datasets.MNIST(
+#     root="dataset/", train=True, transform=transforms.ToTensor(), download=True
+# )
+# test_dataset = datasets.MNIST(
+#     root="dataset/", train=False, transform=transforms.ToTensor(), download=True
+# )
+
+train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True) # 물론 이건 그대로 써도 될 듯?
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
 
@@ -93,7 +105,7 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 for epoch in range(num_epochs):
     for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
         # 데이터 cuda에 갖다박기
-        data = data.to(device=device).squeeze(1) # 일차원으로 넣는다는군요
+        data = data.to(device=device).squeeze(1) # 일차원이 있으면 제거, 따라서 batch는 절대 1로 두면 안될듯
         targets = targets.to(device=device)
 
         # 순전파
