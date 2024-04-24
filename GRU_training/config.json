@@ -1,6 +1,6 @@
 {
-    "inputPath" : "./data/input/temp.csv",
-    "dim" : 5,
+    "inputPath" : "./data/input/tempInput.csv",
+    "dim" : 10,
     "leaky" : false,
     "threshold" : 1.0,
     "reset" : false,

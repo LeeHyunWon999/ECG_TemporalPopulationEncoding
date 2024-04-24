@@ -6,6 +6,9 @@ import numpy as np
 import torch
 from spikingjelly.activation_based import neuron
 
+# 똑같은 TP 인코더, 근데 이제 2차원용으로 차원 확장된
+
+
 # 인코딩용 뉴런 정의
 class TP_neuron(neuron.BaseNode) : 
     
@@ -57,6 +60,8 @@ def encode(json_data) :
     # 임시 : 필요한 경우 내부 막전위값 변화를 timestep별로 보도록 할 수도 있겠지만.. 일단은 패스
     neuron_list = []
     encoded_list = []
+    
+    # 시간축을 이렇게 조지는게 내가 하는거라서.. ** 일단 이거부터 수정필요 **
     for i in range(json_data["dim"]) : 
         # Leaky인 경우 tau값은 0.5~1.5 사이에서 랜덤 지정
         if json_data["leaky"] : 
@@ -70,11 +75,11 @@ def encode(json_data) :
         neuron_list[i].reset()
     
     
-    # 결과값(텐서) 의 첫 열과 둘째 열에 각각 tau, g 값 추가
-    for i in range(len(encoded_list)) : 
-        encoded_list[i] = encoded_list[i].tolist()
-        encoded_list[i].insert(0, neuron_list[i].g)
-        encoded_list[i].insert(0, neuron_list[i].tau)
+    # 결과값(텐서) 의 첫 열과 둘째 열에 각각 tau, g 값 추가 : 일단 MIT-BIH 인코딩용이니 번거롭게 하지 말고 걍 제거, g값 자체도 코드로 유추 가능하니 더더욱.
+    # for i in range(len(encoded_list)) : 
+    #     encoded_list[i] = encoded_list[i].tolist()
+    #     encoded_list[i].insert(0, neuron_list[i].g)
+    #     encoded_list[i].insert(0, neuron_list[i].tau)
         
     print("인코딩 완료")
     
