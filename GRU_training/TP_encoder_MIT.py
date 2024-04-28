@@ -52,6 +52,11 @@ def encode(json_data) :
     
     # 파일 형변환
     inputData = torch.tensor(inputData)
+    
+    # 입력데이터는 [N, T] 형식인데, 인코더 뉴런은 [T, N, *] 을 기대한다. 따라서 축을 변경한다.
+    inputData = inputData.transpose(1,0)
+    
+    print(inputData)
 
     # print(inputData)
     # print(fileName)
@@ -70,8 +75,8 @@ def encode(json_data) :
             this_tau = 1
         neuron_list.append(TP_neuron(tau = this_tau, g = ((float(i) + 1) / float(json_data["dim"])) + 0.5))
         neuron_list[i].step_mode = 'm'
-        encoded_list.append(neuron_list[i](inputData))
-        print(i,"째 뉴런 인코딩 결과 : ", encoded_list[i])
+        encoded_list.append(neuron_list[i](inputData).numpy())
+        print(i,"째 뉴런(g=" + str(neuron_list[i].g) + ") 인코딩 결과 : ", encoded_list[i])
         neuron_list[i].reset()
     
     
@@ -83,8 +88,22 @@ def encode(json_data) :
         
     print("인코딩 완료")
     
+    
+    
+    
     # 임시 : csv로 저장(각 뉴런들의 결과 값 리스트 합치고 저장)
-    np.savetxt('./data/output/' + fileName + '_encoded.csv', encoded_list, fmt="%f", delimiter=',')
+    # np.savetxt('./data/output/' + fileName + '_encoded.csv', encoded_list, fmt="%f", delimiter=',') -> 이건 csv로 저장하면 안되는 것 같다. 내껀 3차원이니깐..
+    
+    # npy 형태로 통일
+    encoded_array = np.array(encoded_list)
+    # 출력데이터 또한 그 순서를 좀 바꾸도록 하자. 지금은 (뉴런, T, 데이터갯수) 인데, 이걸 (데이터갯수, 뉴런, T) 이걸로 바꿔야겠다.
+    encoded_array = encoded_array.transpose(2, 0, 1)
+    
+    # 잘 되는지 출력필요
+    print(encoded_array)
+    
+    # npy로 저장
+    np.save(json_data["outputPath"] + fileName + '_encoded.npy', encoded_array) # 일단 이거 되긴 하는지 확인 필요
 
 
 
