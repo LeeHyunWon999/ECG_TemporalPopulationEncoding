@@ -13,6 +13,7 @@ Programmed by Aladdin Persson <aladdin.persson at hotmail dot com>
 # Imports
 import os
 import torch
+import numpy as np # .npy 읽기용
 import pandas as pd # csv 읽기용
 import torch.nn.functional as F  # 일부 활성화 함수 등 파라미터 없는 함수에 사용
 import torchvision.datasets as datasets  # 일반적인 데이터셋; 이거 아마 MIT-BIH로 바꿔야 할 듯?
@@ -32,17 +33,19 @@ print("Device :" + device) # 확인용
 # input() # 일시정지용
 
 # 하이퍼파라미터와 사전 설정값들(당장은 여기서 조정해가면서 시도해볼 것)
-input_size = 20 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 20개로 작업해보도록 하자.
+input_size = 10 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 10개로 해보자.
 hidden_size = 256 # 히든레이어 크기; 이정도면 적절히 충분하겠지?
 num_layers = 2 # 레이어 크기; 히든과 출력 이렇게 2개 말하는듯
 num_classes = 2 # 클래스 갯수; 난 일단 정상/비정상만 볼 것이니 2개로 지정
 sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 188개 열에 마지막 값은 라벨이므로 187개의 길이가 됨
 learning_rate = 0.005 # 러닝레이트
 batch_size = 64 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
-num_epochs = 3 # 에포크(이거 early stop 걸어야 함)
+num_epochs = 3 # 에포크(이거 나중에 early stop 걸어야 함)
 num_workers = 8 # 데이터 불러올 때 병렬화 갯수
 train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
 test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
+train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_encoded.npy" # 인코딩된 훈련데이터 위치
+test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_encoded.npy" # 인코딩된 테스트데이터 위치
 
 
 # RNN 기반 GRU 모델 (many-to-one이니 내 작업에 그대로 쓸 수 있음)
@@ -76,45 +79,45 @@ class RNN_GRU(nn.Module):
 # 커스텀 데이터셋 관리 클래스
 class MITLoader(Dataset):
 
-    def __init__(self, csv_file, transforms: None) -> None:
+    def __init__(self, original_csv, encoded_npy, transforms: None) -> None:
         super().__init__()
-        self.annotations = pd.read_csv(csv_file).values
+        self.annotations = pd.read_csv(original_csv).values # MIT 라벨 읽기용
+        self.encoded = np.load(encoded_npy) # MIT 인코딩된 데이터 로딩용
         self.transforms = transforms
-
-        # 데이터랑 라벨 굳이 분리 안해도 되는거 아님?? 데이터는 인코딩된거 마지막 뺀 나머지 넣고, 라벨은 어노테이션 값에 있는 라벨(마지막꺼만)가져오면 되잖아.
-
-        # 그럼 바로 인코딩 드간다.
-            # 인코딩 시 2차원 데이터가 3차원으로 늘어남에 유의할 것!!
-            # 또한 TP_encoder로 인코딩 시, 첫 열과 둘째 열에 tau와 g 값이 추가되기 때문에 이것도 제거해야 한다!!! -> 인코더 쪽에서 일부러 제거하면 되긴 한다.
-            
         
-        # 일단 이 정도만 하면 데이터 로딩은 끝나는 것으로 보인다.. 아마.
+        # 근데 이제 RNN은 입력 텐서의 차원을 (시퀀스, 배치, 입력크기) 로 기대하므로, 원본 인코딩 데이터의 (데이터, 입력크기(뉴런갯수), 시퀀스) 를 변형해야 한다.
+        # 참고로 배치는 나중에 추가되는거니까 크게 신경 안써도 되고, 데이터도 어차피 인덱스별로 날아가므로 시퀀스와 입력크기 순서를 바꾸도록 한다.
+        self.encoded = np.transpose(self.encoded, (0, 2, 1))
 
     def __len__(self):
         return self.annotations.shape[0] # shape은 차원당 요소 갯수를 튜플로 반환하므로 행에 해당하는 0번 값 반환 : 이것도 혹시 모르니 변환된 데이터에 대한 걸로 바꿀까? 걍 냅둘까?
 
     def __getitem__(self, item):
-        # signal = self.annotations[item, :-1] # 마지막꺼 빼고 집어넣기 : 여긴 데이터셋이 달라져야 하니 수정 필요함, tau와 g를 없애기 위해 2:-1로 해야 할 듯(마찬가지로 안해도 될수도 있음)
-
-        # 각 축을 명확히 해야 한다. RNN 계열은 입력 텐서의 차원을 (시퀀스, 배치, 입력크기) 로 기대하기 때문.
-        # 배치는 냅두고, 시퀀스와 입력크기가 차원순서에 맞는지 보고 아니면 여기서 transpose.
-
-        label = torch.tensor(int(self.annotations[item, -1]), dtype=torch.long) # 라벨은 마지막꺼만 집어넣기 : 이건 그대로 둬도 될듯?
+        signal = self.encoded[item, :-1] # 마지막꺼 빼고 집어넣기
+    
+        # numpy 배열을 텐서로 변경
+        signal = torch.from_numpy(signal).float()
         
-        # 얘넨 그냥 여기서 변환 갈긴거같은데 일단 대기
-        # signal = torch.from_numpy(signal).float()
-        # signal = self.transforms(signal)
+        # transform이 있는 경우 적용
+        if self.transforms:
+            signal = self.transforms(signal)
+            
+        # 라벨 변경 : 이진 분류를 할 것이므로 0인 경우 0, 아니면 1로 바꿔야 함
+        label = int(self.annotations[item, -1])
+        if label > 0:
+            label = 1  # 1 이상인 모든 값은 1로 변환(난 이진값 처리하니깐)
+            
+        label = torch.tensor(label, dtype=torch.long) # 라벨은 마지막꺼만 집어넣고 텐서로 변환 : 이건 그대로 둬도 될듯?
 
         return signal, label
 
 
 
 # 일단 raw 데이터셋 가져오기
-train_raw = 
-test_raw = 
+train_dataset = MITLoader(original_csv=train_path, encoded_npy=train_encoded_path)
+test_dataset = MITLoader(original_csv=test_path, encoded_npy=test_encoded_path)
 
-
-# 랜덤노이즈, 랜덤쉬프트는 일단 써두기만 하고 구현은 미뤄두자.
+# 랜덤노이즈, 랜덤쉬프트는 일단 여기에 적어두기만 하고 구현은 미뤄두자.
 
 
 # 레거시 : MNIST 넣을땐 일단 이렇게 했음.. 근데 이제 외부에서 끌고 오는 거라서 이걸 이제 수작업으로 바꿔야 한다는 것
