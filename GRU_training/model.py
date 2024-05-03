@@ -20,10 +20,10 @@ import torchvision.datasets as datasets  # 일반적인 데이터셋; 이거 아
 import torchvision.transforms as transforms  # 데이터 증강을 위한 일종의 변형작업이라 함
 from torch import optim  # SGD, Adam 등의 옵티마이저
 from torch import nn  # 모든 DNN 모델들
-from torch.utils.data import (
-    DataLoader, Dataset,
-)  # 미니배치 등의 데이터셋 관리를 도와주는 녀석
+from torch.utils.data import (DataLoader, Dataset)  # 미니배치 등의 데이터셋 관리를 도와주는 녀석
 from tqdm import tqdm  # 진행도 표시용
+import torchmetrics # 평가지표 로깅용
+from torch.utils.tensorboard import SummaryWriter # tensorboard 기록용
 
 # Cuda 써야겠지?
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # GPU 번호별로 0번부터 나열
@@ -39,14 +39,33 @@ num_layers = 2 # 레이어 크기; 히든과 출력 이렇게 2개 말하는듯
 num_classes = 2 # 클래스 갯수; 난 일단 정상/비정상만 볼 것이니 2개로 지정
 sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 188개 열에 마지막 값은 라벨이므로 187개의 길이가 됨
 learning_rate = 0.005 # 러닝레이트
-batch_size = 64 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
-num_epochs = 3 # 에포크(이거 나중에 early stop 걸어야 함)
+batch_size = 2048 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
+num_epochs = 150 # 에포크(이거 나중에 early stop 걸어야 함)
+early_stop = 20 # 에포크 진행 전에 이걸로 끊기
 num_workers = 8 # 데이터 불러올 때 병렬화 갯수
 train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
 test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
 train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_encoded.npy" # 인코딩된 훈련데이터 위치
 test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_encoded.npy" # 인코딩된 테스트데이터 위치
 
+# 텐서보드 선언(인자도 미리 뽑아두기; 나중에 json으로 바꿀 것!)
+# 텐서보드 사용 유무를 json에서 설정하는 경우 눈치껏 조건문으로 비활성화!
+board_class = 'binary' if num_classes == 2 else 'multi' # 클래스갯수를 1로 두진 않겠지?
+board_input = str(input_size)
+board_earlystop = str(early_stop)
+writer = SummaryWriter(log_dir="./tensorboard/"+"GRU_binary" + board_class + "_input" + board_input + "_early" + board_earlystop)
+
+# 텐서보드에 찍을 메트릭 여기서 정의
+f1_micro = torchmetrics.F1Score(num_classes=2, average='micro', task='binary').to(device)
+f1_weighted = torchmetrics.F1Score(num_classes=2, average='weighted', task='binary').to(device)
+auroc_macro = torchmetrics.AUROC(num_classes=2, average='macro', task='binary').to(device)
+auroc_weighted = torchmetrics.AUROC(num_classes=2, average='weighted', task='binary').to(device)
+auprc = torchmetrics.AveragePrecision(num_classes=2, task='binary').to(device)
+accuracy = torchmetrics.Accuracy(threshold=0.5, task='binary').to(device)
+# 참고 : 이것 외에도 에포크, Loss까지 찍어야 하니 참고할 것!
+earlystop_counter = early_stop
+min_valid_loss = float('inf')
+final_epoch = 0 # 마지막에 최종 에포크 확인용
 
 # RNN 기반 GRU 모델 (many-to-one이니 내 작업에 그대로 쓸 수 있음)
 class RNN_GRU(nn.Module):
@@ -70,11 +89,9 @@ class RNN_GRU(nn.Module):
         return out
     
 
-
-
-
-# 데이터 가져오기(아마 여길 가장 많이 바꿔야 할 듯,,,)
+# 데이터 가져오기용 클래스(아마 여길 가장 많이 바꿔야 할 듯,,,)
 # MIT-BIH를 인코딩해야 하므로, 공간 많이 잡아먹지 싶다. 이건 /data/leehyunwon/ 이쪽에 변환 후 넣고 나서 여기서 불러오는 식으로 해야 할 듯
+# 나중에 json으로 옮기면서 동시에 데이터로더에 넣었던 인코딩 레이어를 GRU 쪽에 붙여서 학습 가능하게끔 만들기...? 되는지조차 불투명하니 나중에 생각해봐야 할 듯
 
 # 커스텀 데이터셋 관리 클래스
 class MITLoader(Dataset):
@@ -93,7 +110,7 @@ class MITLoader(Dataset):
         return self.annotations.shape[0] # shape은 차원당 요소 갯수를 튜플로 반환하므로 행에 해당하는 0번 값 반환 : 이것도 혹시 모르니 변환된 데이터에 대한 걸로 바꿀까? 걍 냅둘까?
 
     def __getitem__(self, item):
-        signal = self.encoded[item, :-1] # 마지막꺼 빼고 집어넣기
+        signal = self.encoded[item, :-1] # 마지막은 라벨이니 그거 빼고 집어넣기
     
         # numpy 배열을 텐서로 변경
         signal = torch.from_numpy(signal).float()
@@ -107,33 +124,84 @@ class MITLoader(Dataset):
         if label > 0:
             label = 1  # 1 이상인 모든 값은 1로 변환(난 이진값 처리하니깐)
             
-        label = torch.tensor(label, dtype=torch.long) # 라벨은 마지막꺼만 집어넣고 텐서로 변환 : 이건 그대로 둬도 될듯?
+        label = torch.tensor(label, dtype=torch.long) # 처리 다 된 라벨을 텐서로 변환
 
         return signal, label
 
 
+# test 데이터로 정확도 측정
+def check_accuracy(loader, model):
+
+    # 각종 메트릭들 리셋(train에서 에폭마다 돌리므로 얘도 에폭마다 들어감)
+    total_loss = 0
+    accuracy.reset()
+    f1_micro.reset()
+    f1_weighted.reset()
+    auroc_macro.reset()
+    auroc_weighted.reset()
+    auprc.reset()
+
+    # 모델 평가용으로 전환
+    model.eval()
+
+    with  torch.no_grad():
+        for x, y in loader:
+            x = x.to(device=device).squeeze(1)
+            y = y.to(device=device)
+
+            scores = model(x)
+            loss = criterion(scores, y) # loss값 직접 따오기 위해 여기서도 loss값 추려내기
+            total_loss += loss.item() # loss값 따오기
+
+            # 여기도 메트릭 update해야 compute 가능함
+            # 여기도 마찬가지로 크로스엔트로피 드가는거 생각해서 1차원으로 변경 필요함
+            preds = torch.argmax(scores, dim=1)
+            accuracy.update(preds, y)
+            f1_micro.update(preds, y)
+            f1_weighted.update(preds, y)
+            auroc_macro.update(preds, y)
+            auroc_weighted.update(preds, y)
+            probabilities = F.softmax(scores, dim=1)[:, 1]  # 클래스 "1"의 확률 추출
+            auprc.update(probabilities, y)
+
+    # 각종 평가수치들 만들고 tensorboard에 기록
+    valid_loss = total_loss / len(loader)
+    valid_accuracy = accuracy.compute()
+    valid_f1_micro = f1_micro.compute()
+    valid_f1_weighted = f1_weighted.compute()
+    valid_auroc_macro = auroc_macro.compute()
+    valid_auroc_weighted = auroc_weighted.compute()
+    valid_auprc = auprc.compute()
+
+    writer.add_scalar('valid_Loss', valid_loss, epoch)
+    writer.add_scalar('valid_Accuracy', valid_accuracy, epoch)
+    writer.add_scalar('valid_F1_micro', valid_f1_micro, epoch)
+    writer.add_scalar('valid_F1_weighted', valid_f1_weighted, epoch)
+    writer.add_scalar('valid_AUROC_macro', valid_auroc_macro, epoch)
+    writer.add_scalar('valid_AUROC_weighted', valid_auroc_weighted, epoch)
+    writer.add_scalar('valid_auprc', valid_auprc, epoch)
+
+    # 모델 다시 훈련으로 전환
+    model.train()
+
+    # valid loss를 반환한다. 이걸로 early stop 확인.
+    return valid_loss
+
+
+
+
+
+# 학습시작!
+
 
 # 일단 raw 데이터셋 가져오기
-train_dataset = MITLoader(original_csv=train_path, encoded_npy=train_encoded_path)
-test_dataset = MITLoader(original_csv=test_path, encoded_npy=test_encoded_path)
+train_dataset = MITLoader(original_csv=train_path, encoded_npy=train_encoded_path, transforms=None)
+test_dataset = MITLoader(original_csv=test_path, encoded_npy=test_encoded_path, transforms=None)
 
 # 랜덤노이즈, 랜덤쉬프트는 일단 여기에 적어두기만 하고 구현은 미뤄두자.
 
-
-# 레거시 : MNIST 넣을땐 일단 이렇게 했음.. 근데 이제 외부에서 끌고 오는 거라서 이걸 이제 수작업으로 바꿔야 한다는 것
-# train_dataset = datasets.MNIST(
-#     root="dataset/", train=True, transform=transforms.ToTensor(), download=True
-# )
-# test_dataset = datasets.MNIST(
-#     root="dataset/", train=False, transform=transforms.ToTensor(), download=True
-# )
-
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True) # 물론 이건 그대로 써도 될 듯?
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
-
-
-
-
 
 
 # 네트워크 초기화
@@ -145,6 +213,17 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # 모델 학습 시작(학습추이 확인해야 하니 훈련, 평가 모두 Acc, F1, AUROC, AUPRC 넣을 것!)
 for epoch in range(num_epochs):
+    # 에폭마다 각종 메트릭들 리셋
+    total_loss = 0
+    accuracy.reset()
+    f1_micro.reset()
+    f1_weighted.reset()
+    auroc_macro.reset()
+    auroc_weighted.reset()
+    auprc.reset()
+
+
+    # 배치단위 실행
     for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
         # 데이터 cuda에 갖다박기
         data = data.to(device=device).squeeze(1) # 일차원이 있으면 제거, 따라서 batch는 절대 1로 두면 안될듯
@@ -154,6 +233,8 @@ for epoch in range(num_epochs):
         scores = model(data)
         loss = criterion(scores, targets)
 
+        total_loss += loss.item() # loss값 따오기
+
         # 역전파
         optimizer.zero_grad()
         loss.backward()
@@ -161,28 +242,55 @@ for epoch in range(num_epochs):
         # 아담 옵티머스 프라임 출격
         optimizer.step()
 
-# test 데이터로 정확도 측정
-def check_accuracy(loader, model):
-    num_correct = 0
-    num_samples = 0
-
-    # 모델 평가용으로 전환
-    model.eval()
-
-    with torch.no_grad():
-        for x, y in loader:
-            x = x.to(device=device).squeeze(1)
-            y = y.to(device=device)
-
-            scores = model(x)
-            _, predictions = scores.max(1)
-            num_correct += (predictions == y).sum()
-            num_samples += predictions.size(0)
-
-    # 모델 다시 훈련으로 전환
-    model.train()
-    return num_correct / num_samples
+        # 배치마다 각 메트릭을 업데이트한 뒤에 compute해야 한댄다
+        # 근데 이제 scores는 크로스엔트로피로, 원시 클래스 확률 로짓이 그대로 있으므로 argmax를 시켜서 값 하나를 뽑아야 한다.
+        preds = torch.argmax(scores, dim=1)
+        accuracy.update(preds, targets)
+        f1_micro.update(preds, targets)
+        f1_weighted.update(preds, targets)
+        auroc_macro.update(preds, targets)
+        auroc_weighted.update(preds, targets)
+        probabilities = F.softmax(scores, dim=1)[:, 1]  # 클래스 "1"의 확률 추출
+        auprc.update(probabilities, targets)
 
 
-print(f"Accuracy on training set: {check_accuracy(train_loader, model)*100:2f}")
-print(f"Accuracy on test set: {check_accuracy(test_loader, model)*100:.2f}")
+    # 한 에포크 진행 다 됐으면 training 지표 tensorboard에 찍고 valid 돌리기
+    train_loss = total_loss / len(train_loader)
+    train_accuracy = accuracy.compute()
+    train_f1_micro = f1_micro.compute()
+    train_f1_weighted = f1_weighted.compute()
+    train_auroc_macro = auroc_macro.compute()
+    train_auroc_weighted = auroc_weighted.compute()
+    train_auprc = auprc.compute()
+
+    writer.add_scalar('train_Loss', train_loss, epoch)
+    writer.add_scalar('train_Accuracy', train_accuracy, epoch)
+    writer.add_scalar('train_F1_micro', train_f1_micro, epoch)
+    writer.add_scalar('train_F1_weighted', train_f1_weighted, epoch)
+    writer.add_scalar('train_AUROC_macro', train_auroc_macro, epoch)
+    writer.add_scalar('train_AUROC_weighted', train_auroc_weighted, epoch)
+    writer.add_scalar('train_auprc', train_auprc, epoch)
+
+    valid_loss = check_accuracy(test_loader, model) # valid(자체적으로 tensorboard 내장됨), 반환값으로 얼리스탑 확인하기
+
+    print('epoch ' + str(epoch) + ', valid loss : ' + str(valid_loss))
+
+    if valid_loss < min_valid_loss : 
+        min_valid_loss = valid_loss
+        earlystop_counter = early_stop
+    else : 
+        earlystop_counter -= 1
+        if earlystop_counter == 0 : 
+            final_epoch = epoch
+            break # train epoch를 빠져나옴
+    
+    
+
+
+
+
+print("training finished; epoch :" + str(final_epoch))
+
+
+# 마지막엔 텐서보드 닫기(기록유무도 json에 적는 경우 눈치껏 비활성화)
+writer.close()
