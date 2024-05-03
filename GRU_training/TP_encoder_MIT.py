@@ -103,7 +103,7 @@ def encode(json_data) :
     print(encoded_array)
     
     # npy로 저장
-    np.save(json_data["outputPath"] + fileName + '_encoded.npy', encoded_array) # 일단 이거 되긴 하는지 확인 필요
+    np.save(json_data["outputPath"] + fileName + '_' + str(json_data["dim"]) + '_encoded.npy', encoded_array) # 일단 이거 되긴 하는지 확인 필요
 
 
 
