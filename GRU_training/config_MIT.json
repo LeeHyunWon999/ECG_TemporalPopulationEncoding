@@ -1,6 +1,6 @@
 {
-    "inputPath" : "/data/common/MIT-BIH/mitbih_train.csv",
-    "dim" : 20,
+    "inputPath" : "/data/common/MIT-BIH/mitbih_test.csv",
+    "dim" : 15,
     "leaky" : false,
     "threshold" : 1.0,
     "reset" : false,

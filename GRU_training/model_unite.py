@@ -25,8 +25,6 @@ from tqdm import tqdm  # 진행도 표시용
 import torchmetrics # 평가지표 로깅용
 from torch.utils.tensorboard import SummaryWriter # tensorboard 기록용
 
-# import torchmetrics.functional as TF # 이걸로 메트릭 한번에 간편하게 할 수 있다던데?
-
 # Cuda 써야겠지?
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # GPU 번호별로 0번부터 나열
 os.environ["CUDA_VISIBLE_DEVICES"]= "2"  # 일단 원석이가 0, 1번 쓰고 있다 하니 2번으로 지정
@@ -35,25 +33,27 @@ print("Device :" + device) # 확인용
 # input() # 일시정지용
 
 # 하이퍼파라미터와 사전 설정값들(당장은 여기서 조정해가면서 시도해볼 것)
-input_size = 15 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 10개로 해보자.
+input_size = 20 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 10개로 해보자.
 hidden_size = 256 # 히든레이어 크기; 이정도면 적절히 충분하겠지?
 num_layers = 2 # 레이어 크기; 히든과 출력 이렇게 2개 말하는듯
 num_classes = 2 # 클래스 갯수; 난 일단 정상/비정상만 볼 것이니 2개로 지정
 sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 188개 열에 마지막 값은 라벨이므로 187개의 길이가 됨
-learning_rate = 0.001 # 러닝레이트
+learning_rate = 0.005 # 러닝레이트
 batch_size = 512 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
 num_epochs = 150 # 에포크(이거 나중에 early stop 걸어야 함)
 early_stop = 20 # 에포크 진행 전에 이걸로 끊기
 num_workers = 8 # 데이터 불러올 때 병렬화 갯수
 train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
 test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
-train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_15_encoded.npy" # 인코딩된 훈련데이터 위치
-test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_15_encoded.npy" # 인코딩된 테스트데이터 위치
+train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_20_encoded.npy" # 인코딩된 훈련데이터 위치
+test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_20_encoded.npy" # 인코딩된 테스트데이터 위치
 
 # 텐서보드 선언(인자도 미리 뽑아두기; 나중에 json으로 바꿀 것!)
 # 텐서보드 사용 유무를 json에서 설정하는 경우 눈치껏 조건문으로 비활성화!
 board_class = 'binary' if num_classes == 2 else 'multi' # 클래스갯수를 1로 두진 않겠지?
-writer = SummaryWriter(log_dir="./tensorboard/"+"GRU_binary" + board_class + "_input" + str(input_size) + "_early" + str(early_stop) + "_lr" + str(learning_rate))
+board_input = str(input_size)
+board_earlystop = str(early_stop)
+writer = SummaryWriter(log_dir="./tensorboard/"+"GRU_binary" + board_class + "_input" + board_input + "_early" + board_earlystop)
 
 # 텐서보드에 찍을 메트릭 여기서 정의
 f1_micro = torchmetrics.F1Score(num_classes=2, average='micro', task='binary').to(device)
@@ -62,8 +62,6 @@ auroc_macro = torchmetrics.AUROC(num_classes=2, average='macro', task='binary').
 auroc_weighted = torchmetrics.AUROC(num_classes=2, average='weighted', task='binary').to(device)
 auprc = torchmetrics.AveragePrecision(num_classes=2, task='binary').to(device)
 accuracy = torchmetrics.Accuracy(threshold=0.5, task='binary').to(device)
-
-
 # 참고 : 이것 외에도 에포크, Loss까지 찍어야 하니 참고할 것!
 earlystop_counter = early_stop
 min_valid_loss = float('inf')
@@ -209,9 +207,8 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=Tr
 # 네트워크 초기화
 model = RNN_GRU(input_size, hidden_size, num_layers, num_classes).to(device)
 
-# Loss와 optimizer (클래스별 배율 설정 포함)
-pos_weight = torch.tensor([0.2, 0.8]).to(device)
-criterion = nn.CrossEntropyLoss(weight=pos_weight)
+# Loss와 optimizer
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # 모델 학습 시작(학습추이 확인해야 하니 훈련, 평가 모두 Acc, F1, AUROC, AUPRC 넣을 것!)
