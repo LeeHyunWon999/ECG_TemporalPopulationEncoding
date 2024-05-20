@@ -18,7 +18,8 @@ import pandas as pd # csv 읽기용
 import torch.nn.functional as F  # 일부 활성화 함수 등 파라미터 없는 함수에 사용
 import torchvision.datasets as datasets  # 일반적인 데이터셋; 이거 아마 MIT-BIH로 바꿔야 할 듯?
 import torchvision.transforms as transforms  # 데이터 증강을 위한 일종의 변형작업이라 함
-from torch import optim  # SGD, Adam 등의 옵티마이저
+from torch import optim  # SGD, Adam 등의 옵티마이저(그래디언트는 이쪽으로 가면 됩니다)
+from torch.optim.lr_scheduler import CosineAnnealingLR # 코사인스케줄러(옵티마이저 보조용)
 from torch import nn  # 모든 DNN 모델들
 from torch.utils.data import (DataLoader, Dataset)  # 미니배치 등의 데이터셋 관리를 도와주는 녀석
 from tqdm import tqdm  # 진행도 표시용
@@ -35,20 +36,20 @@ print("Device :" + device) # 확인용
 # input() # 일시정지용
 
 # 하이퍼파라미터와 사전 설정값들(당장은 여기서 조정해가면서 시도해볼 것)
-input_size = 15 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 10개로 해보자.
+input_size = 10 # 입력사이즈; MNIST라서 가로세로 찢어서 넣는거같은데 내 경우는 일단 10개로 해보자.
 hidden_size = 256 # 히든레이어 크기; 이정도면 적절히 충분하겠지?
 num_layers = 2 # 레이어 크기; 히든과 출력 이렇게 2개 말하는듯
 num_classes = 2 # 클래스 갯수; 난 일단 정상/비정상만 볼 것이니 2개로 지정
 sequence_length = 187 # 시퀀스 길이; MIT-BIH 길이에 맞춰야 함, 총 188개 열에 마지막 값은 라벨이므로 187개의 길이가 됨
-learning_rate = 0.001 # 러닝레이트
+learning_rate = 0.002 # 러닝레이트
 batch_size = 512 # 배치크기(웬만해선 줄일수록 좋다지만 일단 이대로 놓고 천천히 줄여보기)
 num_epochs = 150 # 에포크(이거 나중에 early stop 걸어야 함)
 early_stop = 20 # 에포크 진행 전에 이걸로 끊기
 num_workers = 8 # 데이터 불러올 때 병렬화 갯수
 train_path = "/data/common/MIT-BIH/mitbih_train.csv" # 훈련데이터 위치
 test_path = "/data/common/MIT-BIH/mitbih_test.csv" # 테스트데이터 위치
-train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_15_encoded.npy" # 인코딩된 훈련데이터 위치
-test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_15_encoded.npy" # 인코딩된 테스트데이터 위치
+train_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_train_10_encoded.npy" # 인코딩된 훈련데이터 위치
+test_encoded_path = "/data/leehyunwon/MIT-BIH_TP_encoding/mitbih_test_10_encoded.npy" # 인코딩된 테스트데이터 위치
 
 # 텐서보드 선언(인자도 미리 뽑아두기; 나중에 json으로 바꿀 것!)
 # 텐서보드 사용 유무를 json에서 설정하는 경우 눈치껏 조건문으로 비활성화!
@@ -209,10 +210,11 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=Tr
 # 네트워크 초기화
 model = RNN_GRU(input_size, hidden_size, num_layers, num_classes).to(device)
 
-# Loss와 optimizer (클래스별 배율 설정 포함)
+# Loss와 optimizer, scheduler (클래스별 배율 설정 포함)
 pos_weight = torch.tensor([0.2, 0.8]).to(device)
 criterion = nn.CrossEntropyLoss(weight=pos_weight)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+scheduler = CosineAnnealingLR(optimizer=optimizer, T_max=50, eta_min=0.00001)
 
 # 모델 학습 시작(학습추이 확인해야 하니 훈련, 평가 모두 Acc, F1, AUROC, AUPRC 넣을 것!)
 for epoch in range(num_epochs):
@@ -256,6 +258,9 @@ for epoch in range(num_epochs):
         probabilities = F.softmax(scores, dim=1)[:, 1]  # 클래스 "1"의 확률 추출
         auprc.update(probabilities, targets)
 
+
+    # 스케줄러는 에포크 단위로 진행
+    scheduler.step()
 
     # 한 에포크 진행 다 됐으면 training 지표 tensorboard에 찍고 valid 돌리기
     train_loss = total_loss / len(train_loader)
